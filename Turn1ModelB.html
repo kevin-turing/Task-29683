@@ -1,1 +1,135 @@
-T1MB
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Light Orbs Puzzle</title>
+<style>
+    #game {
+        display: grid;
+        grid-template-columns: repeat(12, 25px);
+        gap: 1px;
+    }
+    .cell { 
+        width: 25px; 
+        height: 25px; 
+        text-align: center; 
+        line-height: 25px; 
+        font-size: 20px; 
+        background-color: #333; 
+        color: white;
+        cursor: pointer;
+    }
+    #menu, #score { margin-bottom: 10px; }
+    button, select { font-size: 16px; }
+</style>
+</head>
+<body>
+<div id="menu">
+    <select id="difficulty">
+        <option value="easy">Easy</option>
+        <option value="medium" selected>Medium</option>
+        <option value="hard">Hard</option>
+    </select>
+    <button onclick="startGame()">Start Game</button>
+</div>
+<div id="score">Score: <span id="currentScore">0</span> | Orbs: <span id="orbsPlaced">0</span> | Points Left: <span id="pointsLeft">0</span></div>
+<div id="game"></div>
+
+<script>
+    const gridSize = 12;
+    let grid, points, orbsPlaced, currentScore;
+    const symbols = { empty: '⬛', light: '💡', lit: '🔲', mirror: '🪞', obstacle: '⬜' };
+
+    function initializeGame(difficulty) {
+        const obstacles = { easy: 10, medium: 20, hard: 30 };
+        grid = Array(gridSize).fill().map(() => Array(gridSize).fill(symbols.empty));
+        points = { easy: 100, medium: 70, hard: 50 }[difficulty];
+        orbsPlaced = 0;
+        currentScore = 0;
+        placeRandomObstacles(obstacles[difficulty]);
+        updateDisplay();
+    }
+
+    function placeRandomObstacles(count) {
+        for(let i = 0; i < count; i++) {
+            let x, y;
+            do {
+                x = Math.floor(Math.random() * gridSize);
+                y = Math.floor(Math.random() * gridSize);
+            } while(grid[y][x] !== symbols.empty);
+            grid[y][x] = symbols.obstacle;
+        }
+    }
+
+    function startGame() {
+        initializeGame(document.getElementById('difficulty').value);
+        renderGrid();
+    }
+
+    function renderGrid() {
+        const gameDiv = document.getElementById('game');
+        gameDiv.innerHTML = '';
+        grid.forEach(row => {
+            row.forEach(cell => {
+                const div = document.createElement('div');
+                div.className = 'cell';
+                div.textContent = cell;
+                div.onclick = () => placeItem(cell, div);
+                gameDiv.appendChild(div);
+            });
+        });
+        updateScoreDisplay();
+    }
+
+    function placeItem(currentSymbol, cellElement) {
+        if(points > 0 && currentSymbol === symbols.empty) {
+            grid[Array.from(cellElement.parentNode.children).indexOf(cellElement) % gridSize][Math.floor(Array.from(cellElement.parentNode.children).indexOf(cellElement) / gridSize)] = symbols.light;
+            points -= 10;
+            orbsPlaced++;
+            propagateLight();
+            renderGrid();
+        }
+    }
+
+    function propagateLight() {
+        let changes;
+        do {
+            changes = false;
+            for(let y = 0; y < gridSize; y++) {
+                for(let x = 0; x < gridSize; x++) {
+                    if(grid[y][x] === symbols.light || grid[y][x] === symbols.lit) {
+                        const directions = [[0,1], [1,0], [0,-1], [-1,0]];
+                        for(let [dx, dy] of directions) {
+                            let nx = x + dx, ny = y + dy;
+                            while(nx >= 0 && nx < gridSize && ny >= 0 && ny < gridSize) {
+                                if(grid[ny][nx] === symbols.empty) {
+                                    grid[ny][nx] = symbols.lit;
+                                    changes = true;
+                                    currentScore++;
+                                } else if(grid[ny][nx] === symbols.mirror) {
+                                    // Simplified mirror logic: just change direction
+                                    [dx, dy] = [dy, dx]; // Rotate direction for mirror
+                                } else break;
+                                nx += dx; ny += dy;
+                            }
+                        }
+                    }
+                }
+            }
+        } while(changes);
+    }
+
+    function updateScoreDisplay() {
+        document.getElementById('currentScore').textContent = currentScore;
+        document.getElementById('orbsPlaced').textContent = orbsPlaced;
+        document.getElementById('pointsLeft').textContent = points;
+    }
+
+    function updateDisplay() {
+        renderGrid();
+        updateScoreDisplay();
+    }
+</script>
+</body>
+</html>

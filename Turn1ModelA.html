@@ -1,164 +1,122 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <title>THEMIS & ARTEMIS Mission Visualization</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.3.0/d3.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@observablehq/plot@0.6"></script>
-    <link
-      rel="stylesheet"
-      href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css"
-    />
-    <style>
-      body {
-        font-family: Arial, sans-serif;
-        background: #000;
-        color: #fff;
-        overflow: hidden;
-      }
-      #visualization {
-        width: 100vw;
-        height: 100vh;
-        position: relative;
-      }
-      .orbit {
-        stroke: #fff;
-        fill: none;
-        stroke-width: 1;
-      }
-      .probe {
-        fill: #ffd700;
-        stroke: #000;
-        stroke-width: 0.5;
-      }
-      .info-box {
-        position: absolute;
-        background: rgba(0, 0, 0, 0.8);
+<head>
+<meta charset="UTF-8">
+<title>Light Orbs Puzzle</title>
+<style>
+    #game-grid {
+        display: grid;
+        grid-template-columns: repeat(12, 25px);
+        grid-gap: 1px;
+        background-color: #000;
         padding: 10px;
-        border-radius: 5px;
-        display: none;
-      }
-      .phase-button {
-        background-color: #4caf50; /* Green */
-        border: none;
-        color: white;
-        padding: 15px 32px;
+    }
+    .cell {
+        width: 25px;
+        height: 25px;
+        line-height: 25px;
         text-align: center;
-        text-decoration: none;
-        display: inline-block;
-        font-size: 16px;
-        margin: 4px 2px;
-        cursor: pointer;
-      }
-    </style>
-  </head>
-  <body>
-    <div id="visualization"></div>
-    <div id="info" class="info-box"></div>
-    <div style="position: absolute; bottom: 10px; left: 10px">
-      <button class="phase-button" onclick="showPhase('Tail')">
-        Tail Phase
-      </button>
-      <button class="phase-button" onclick="showPhase('Dawn')">
-        Dawn Phase
-      </button>
-      <button class="phase-button" onclick="showPhase('Dayside')">
-        Dayside Phase
-      </button>
-      <button class="phase-button" onclick="showPhase('Dusk')">
-        Dusk Phase
-      </button>
-    </div>
+        background: #333;
+        color: white;
+    }
+    #menu {
+        margin: 10px 0;
+    }
+    #score {
+        margin-top: 10px;
+    }
+</style>
+</head>
+<body>
+<div id="menu">
+    <select id="difficulty">
+        <option value="easy">Easy</option>
+        <option value="medium">Medium</option>
+        <option value="hard">Hard</option>
+    </select>
+    <button onclick="startGame()">Start Game</button>
+</div>
+<div id="game-grid"></div>
+<div id="score">Score: <span id="scoreValue">0</span></div>
 
-    <script>
-      const width = window.innerWidth,
-        height = window.innerHeight;
-      const svg = d3
-        .select('#visualization')
-        .append('svg')
-        .attr('width', width)
-        .attr('height', height);
+<script>
+    const gridSize = 12;
+    let grid = [];
+    let score = 0;
+    let orbsPlaced = 0;
+    const orbCost = 5;
+    const lightGain = 1;
 
-      const phases = {
-        Tail: { apogee: 12, sector: 'nightside', mmsPosition: 'dawn' },
-        Dawn: { apogee: 12, sector: 'dawnside', mmsPosition: 'dayside' },
-        Dayside: { apogee: 12, sector: 'dayside', mmsPosition: 'dusk' },
-        Dusk: { apogee: 13, sector: 'duskside', mmsPosition: 'tail' },
-      };
+    function initializeGrid() {
+        grid = Array(gridSize).fill().map(() => Array(gridSize).fill('⚫'));
+        // Here, place walls and mirrors based on difficulty
+        // For simplicity, let's manually place some for now
+        grid[1][1] = '🟥'; grid[1][2] = '➡️';
+    }
 
-      function drawOrbits(phase) {
-        svg.selectAll('*').remove();
-        const phaseData = phases[phase];
-        const scale = d3
-          .scaleLinear()
-          .domain([0, 30])
-          .range([0, height / 2 - 50]);
-        const center = { x: width / 2, y: height / 2 };
+    function renderGrid() {
+        const gridElement = document.getElementById('game-grid');
+        gridElement.innerHTML = '';
+        grid.forEach(row => {
+            row.forEach(cell => {
+                const cellDiv = document.createElement('div');
+                cellDiv.className = 'cell';
+                cellDiv.textContent = cell;
+                cellDiv.onclick = () => placeOrb(cellDiv);
+                gridElement.appendChild(cellDiv);
+            });
+        });
+    }
 
-        // Earth
-        svg
-          .append('circle')
-          .attr('cx', center.x)
-          .attr('cy', center.y)
-          .attr('r', 20)
-          .attr('fill', 'blue');
-
-        // Draw THEMIS orbits
-        for (let i = 0; i < 3; i++) {
-          const r = scale(phaseData.apogee + i * 0.5);
-          svg
-            .append('ellipse')
-            .attr('class', 'orbit')
-            .attr('cx', center.x)
-            .attr('cy', center.y)
-            .attr('rx', r)
-            .attr('ry', r * 0.5)
-            .attr('transform', `rotate(${i * 30}, ${center.x}, ${center.y})`);
-
-          // Probe position
-          svg
-            .append('circle')
-            .attr('class', 'probe')
-            .attr('cx', center.x + r * Math.cos((i * Math.PI) / 6))
-            .attr('cy', center.y + r * 0.5 * Math.sin((i * Math.PI) / 6))
-            .attr('r', 5)
-            .on('mouseover', function () {
-              showInfo(phase, i);
-            })
-            .on('mouseout', hideInfo);
+    function placeOrb(cell) {
+        if (cell.textContent === '⚫') {
+            cell.textContent = '🌟';
+            orbsPlaced++;
+            updateScore(-orbCost);
+            propagateLight(cell.dataset.row, cell.dataset.col);
         }
+    }
 
-        // MMS position indicator
-        svg
-          .append('text')
-          .attr('x', width - 100)
-          .attr('y', 50)
-          .text(`MMS: ${phaseData.mmsPosition} sector`)
-          .attr('fill', 'white');
-      }
+    function propagateLight(row, col) {
+        const directions = [[1,0], [-1,0], [0,1], [0,-1]];
+        directions.forEach(dir => {
+            let r = row * 1, c = col * 1;
+            while(true) {
+                r += dir[0]; c += dir[1];
+                if (r < 0 || c < 0 || r >= gridSize || c >= gridSize) break;
+                if (grid[r][c] === '⚫') {
+                    grid[r][c] = '💡'; // Lit cell
+                    updateScore(lightGain);
+                } else if (grid[r][c] === '🟥') break;
+                else if (['➡️','⬇️','⬅️','⬆️'].includes(grid[r][c])) {
+                    // Change direction based on mirror
+                    dir = getNewDirection(grid[r][c], dir);
+                }
+            }
+        });
+        renderGrid();
+    }
 
-      function showInfo(phase, probeIndex) {
-        d3.select('#info')
-          .style('display', 'block')
-          .html(
-            `Phase: ${phase}<br>Probe ${probeIndex + 3}: Studying ${
-              phaseData.sector
-            } interactions`
-          )
-          .style('left', d3.event.pageX + 10 + 'px')
-          .style('top', d3.event.pageY - 28 + 'px');
-      }
+    function getNewDirection(mirror, currentDir) {
+        // Logic for mirror reflection
+        // This function would determine how light reflects off mirrors
+        return currentDir; // Placeholder
+    }
 
-      function hideInfo() {
-        d3.select('#info').style('display', 'none');
-      }
+    function updateScore(points) {
+        score += points;
+        document.getElementById('scoreValue').textContent = score;
+    }
 
-      function showPhase(phase) {
-        drawOrbits(phase);
-      }
+    function startGame() {
+        initializeGrid();
+        renderGrid();
+        score = 0;
+        orbsPlaced = 0;
+        updateScore(0);
+    }
 
-      // Initial draw
-      drawOrbits('Tail');
-    </script>
-  </body>
+    startGame(); // Initialize the game on load
+</script>
+</body>
 </html>
